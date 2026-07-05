@@ -6,9 +6,8 @@ from pathlib import Path
 TASK_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = TASK_ROOT / "data"
 
-DEFAULT_NIMSTIM_DIR = Path(
-    "/Users/joecussen/Documents/Jobs/unimelb/projects/breathwork/resources/faces/NimStim_ER"
-)
+# Local, gitignored NimStim_ER folder. Do not commit or publicly share these files.
+DEFAULT_NIMSTIM_DIR = TASK_ROOT / "resources" / "NimStim_ER"
 NIMSTIM_IDENTITIES = (
     "01F",
     "07F",

@@ -145,9 +145,9 @@ def candidate_sort_key(path: Path) -> tuple[int, int, int, int, str]:
     stem = path.stem.upper()
     is_mirror = 1 if "MIRROR" in stem else 0
     mouth_rank = 2
-    if re.search(r"(^|_)O($|_)", stem):
+    if re.search(r"(^|_)C($|_)", stem):
         mouth_rank = 0
-    elif re.search(r"(^|_)C($|_)", stem):
+    elif re.search(r"(^|_)O($|_)", stem):
         mouth_rank = 1
     extension_rank = {
         ".bmp": 0,

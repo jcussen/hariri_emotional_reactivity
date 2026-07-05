@@ -21,6 +21,13 @@ from task.stimuli import (
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+DEFAULT_PARTICIPANT_ID = "TEST01"
+DEFAULT_SESSION = "01"
+DEFAULT_RUN = "01"
+
+
+class MetadataCancelled(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -35,8 +42,8 @@ class OutputPaths:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the emotional face-matching task.")
     parser.add_argument("--participant-id", help="Participant ID without the sub- prefix.")
-    parser.add_argument("--session", default="01", help="Session label. Default: 01.")
-    parser.add_argument("--run", default="01", help="Run label. Default: 01.")
+    parser.add_argument("--session", help="Session label. Default in dialog: 01.")
+    parser.add_argument("--run", help="Run label. Default in dialog: 01.")
     parser.add_argument("--seed", type=int, help="Optional random seed for reproducible schedules.")
     parser.add_argument(
         "--stim-dir",
@@ -67,16 +74,54 @@ def clean_label(value: str) -> str:
 
 
 def collect_metadata(args: argparse.Namespace) -> dict[str, str]:
+    if args.validate_only:
+        return {
+            "participant_id": clean_label(args.participant_id or "validate"),
+            "session": clean_label(args.session or DEFAULT_SESSION),
+            "run": clean_label(args.run or DEFAULT_RUN),
+        }
+
     participant_id = args.participant_id
-    if not participant_id and args.validate_only:
-        participant_id = "validate"
-    if not participant_id:
-        participant_id = input("Participant ID: ").strip()
+    session = args.session
+    run = args.run
+
+    if not participant_id or not session or not run:
+        dialog_metadata = show_metadata_dialog(
+            participant_id=participant_id or DEFAULT_PARTICIPANT_ID,
+            session=session or DEFAULT_SESSION,
+            run=run or DEFAULT_RUN,
+        )
+        participant_id = dialog_metadata["participant_id"]
+        session = dialog_metadata["session"]
+        run = dialog_metadata["run"]
 
     return {
         "participant_id": clean_label(participant_id),
-        "session": clean_label(args.session),
-        "run": clean_label(args.run),
+        "session": clean_label(session),
+        "run": clean_label(run),
+    }
+
+
+def show_metadata_dialog(participant_id: str, session: str, run: str) -> dict[str, str]:
+    from psychopy import gui
+
+    dialog_data = {
+        "Participant ID": participant_id,
+        "Session": session,
+        "Run": run,
+    }
+    dialog = gui.DlgFromDict(
+        dictionary=dialog_data,
+        title="Emotional Face-Matching Task",
+        order=("Participant ID", "Session", "Run"),
+    )
+    if not dialog.OK:
+        raise MetadataCancelled("Task cancelled before participant details were entered.")
+
+    return {
+        "participant_id": dialog_data["Participant ID"],
+        "session": dialog_data["Session"],
+        "run": dialog_data["Run"],
     }
 
 
@@ -99,7 +144,11 @@ def write_json(path: Path, payload: dict) -> None:
 
 def main() -> int:
     args = parse_args()
-    metadata = collect_metadata(args)
+    try:
+        metadata = collect_metadata(args)
+    except MetadataCancelled as exc:
+        print(exc)
+        return 0
     output_paths = build_output_paths(metadata["participant_id"])
     output_paths.output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -58,6 +58,6 @@ fi
 echo
 echo "Environment is ready."
 echo "Windowed test run:"
-echo "  bash run_with_env.sh --window"
+echo "  bash run_task.sh window"
 echo "Fullscreen run:"
-echo "  bash run_with_env.sh"
+echo "  bash run_task.sh"
