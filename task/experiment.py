@@ -37,8 +37,7 @@ def run_experiment(
             win,
             event,
             "Emotional face matching\n\n"
-            "Choose the lower image or shape that matches the target.\n\n"
-            "Press space to begin practice.",
+            "Choose the lower image or shape that matches the target.",
         ):
             quit_early = True
 
