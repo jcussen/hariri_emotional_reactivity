@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+task/__pycache__/
+.conda_env/
+.home/
+data/*
+!data/.gitkeep
