@@ -4,5 +4,48 @@ dependencies:
   - python=3.10
   - pip
   - pandas
+  # setup_env.sh installs psychopy==2023.2.3 after these dependencies. The
+  # old PsychoPy release declares pypi-search, which is unavailable on PyPI.
   - pip:
-      - psychopy>=2024.2
+      - numpy>=1.23,<2.0
+      - scipy
+      - matplotlib
+      - pyglet==1.5.27
+      - pillow>=9.4.0,<12.0
+      - pyqt5
+      - questplus>=2023.1
+      - openpyxl
+      - xmlschema
+      - soundfile
+      - imageio
+      - imageio-ffmpeg
+      - psychtoolbox
+      - gevent
+      - psutil
+      - pyzmq>=22.2.1
+      - ujson
+      - msgpack
+      - msgpack-numpy
+      - pyyaml
+      - freetype-py
+      - python-bidi
+      - arabic-reshaper
+      - javascripthon
+      - websockets
+      - wxPython>=4.1.1
+      - markdown-it-py
+      - requests
+      - future
+      - setuptools<=66.1.1
+      - python-gitlab
+      - gitpython
+      - cryptography
+      - astunparse
+      - esprima
+      - jedi>=0.16
+      - pyserial
+      - ffpyplayer
+      - opencv-python==4.11.0.86
+      - python-vlc>=3.0.12118
+      - pyobjc==7.3
+      - tables

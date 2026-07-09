@@ -18,11 +18,10 @@ def generate_main_schedule(
     stimulus_set: StimulusSet,
     participant_id: str,
     session: str,
-    run: str,
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
-    rng = random.Random(seed)
-    metadata = {"participant_id": participant_id, "session": session, "run": run}
+    rng = random.Random(config.DEFAULT_SCHEDULE_SEED if seed is None else seed)
+    metadata = {"participant_id": participant_id, "session": session}
 
     face_count = config.BLOCK_ORDER.count("face") * config.TRIALS_PER_BLOCK
     shape_count = config.BLOCK_ORDER.count("shape") * config.TRIALS_PER_BLOCK
@@ -65,11 +64,11 @@ def generate_practice_schedule(
     stimulus_set: StimulusSet,
     participant_id: str,
     session: str,
-    run: str,
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
-    rng = random.Random(None if seed is None else seed + 10_000)
-    metadata = {"participant_id": participant_id, "session": session, "run": run}
+    base_seed = config.DEFAULT_SCHEDULE_SEED if seed is None else seed
+    rng = random.Random(base_seed + 10_000)
+    metadata = {"participant_id": participant_id, "session": session}
     typed_specs: list[tuple[str, dict[str, Any]]] = [
         ("face", spec)
         for spec in _make_face_specs(
@@ -128,7 +127,12 @@ def _make_face_specs(
         )
 
     sexes = _balanced_sequence(tuple(sorted(identities_by_sex)), total_trials)
-    target_emotions = _balanced_sequence(config.FACE_EMOTIONS, total_trials)
+    target_emotions = _balanced_sequence(
+        config.FACE_EMOTIONS,
+        total_trials,
+        require_equal_counts=True,
+    )
+    emotion_offset = rng.randrange(1, len(config.FACE_EMOTIONS))
     correct_sides = _balanced_sequence(("left", "right"), total_trials)
     rng.shuffle(sexes)
     rng.shuffle(target_emotions)
@@ -154,6 +158,7 @@ def _make_face_specs(
             match_identity=match_identity,
             distractor_identity=distractor_identity,
             target_emotion=target_emotion,
+            distractor_emotion=_offset_emotion(target_emotion, emotion_offset),
             correct_side=correct_side,
             iti_duration=config.PRACTICE_ITI if practice else rng.choice(config.FACE_ITI_OPTIONS),
         )
@@ -197,18 +202,18 @@ def _face_spec(
     match_identity: str,
     distractor_identity: str,
     target_emotion: str,
+    distractor_emotion: str,
     correct_side: str,
     iti_duration: float,
 ) -> dict[str, Any]:
-    other_emotion = "fearful" if target_emotion == "angry" else "angry"
     if correct_side == "left":
         left_identity = match_identity
         left_emotion = target_emotion
         right_identity = distractor_identity
-        right_emotion = other_emotion
+        right_emotion = distractor_emotion
     else:
         left_identity = distractor_identity
-        left_emotion = other_emotion
+        left_emotion = distractor_emotion
         right_identity = match_identity
         right_emotion = target_emotion
 
@@ -265,8 +270,8 @@ def _base_row(
         {
             "participant_id": metadata["participant_id"],
             "session": metadata["session"],
-            "run": metadata["run"],
             "phase": phase,
+            "event_type": "trial",
             "block_index": block_index,
             "block_type": block_type,
             "trial_index_global": trial_index_global,
@@ -276,11 +281,27 @@ def _base_row(
     return row
 
 
-def _balanced_sequence(values: tuple[str, ...], total: int) -> list[str]:
+def _balanced_sequence(
+    values: tuple[str, ...],
+    total: int,
+    require_equal_counts: bool = False,
+) -> list[str]:
     if not values:
         raise ScheduleError("Cannot balance an empty sequence.")
+    if require_equal_counts and total % len(values):
+        raise ScheduleError(
+            f"Cannot equally balance {total} trials across {len(values)} values."
+        )
     sequence = [values[index % len(values)] for index in range(total)]
     return sequence
+
+
+def _offset_emotion(target_emotion: str, offset: int) -> str:
+    emotions = config.FACE_EMOTIONS
+    if len(emotions) < 2:
+        raise ScheduleError("Face trials require at least two emotions.")
+    target_index = emotions.index(target_emotion)
+    return emotions[(target_index + offset) % len(emotions)]
 
 
 def _choose_least_used(

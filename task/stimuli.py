@@ -10,6 +10,9 @@ SUPPORTED_IMAGE_EXTENSIONS = {".bmp", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 EMOTION_ALIASES = {
     "angry": {"an", "ang", "anger", "angry"},
     "fearful": {"fe", "fear", "fearful", "afraid"},
+    "happy": {"ha", "hap", "happy"},
+    "sad": {"sa", "sad"},
+    "neutral": {"ne", "neu", "neutral"},
 }
 
 

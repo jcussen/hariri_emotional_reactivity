@@ -17,6 +17,7 @@ def run_experiment(
     output_paths: dict[str, Path],
     context: dict[str, Any],
     fullscreen: bool = True,
+    practice_mode: bool = False,
 ) -> dict[str, Any]:
     from psychopy import core, event, visual
 
@@ -33,50 +34,95 @@ def run_experiment(
     global_clock = core.Clock()
 
     try:
-        if not _show_text(
-            win,
-            event,
-            "Emotional face matching\n\n"
-            "Choose the lower image or shape that matches the target.",
-        ):
-            quit_early = True
+        if practice_mode:
+            if not _show_text(win, event, _practice_instruction_text()):
+                quit_early = True
 
-        if not quit_early:
-            quit_early = _run_practice(
-                win,
-                event,
-                visual,
-                core,
-                global_clock,
-                practice_schedule,
-                events,
-                output_paths["events"],
-            )
+            if not quit_early:
+                quit_early = _run_practice(
+                    win,
+                    event,
+                    visual,
+                    core,
+                    global_clock,
+                    practice_schedule,
+                    events,
+                    output_paths["events"],
+                )
 
-        if not quit_early and not _show_text(
-            win,
-            event,
-            "Main task\n\n"
-            "Respond as quickly and accurately as you can.\n"
-            "There will be no feedback during the main task.\n\n"
-            "Press space to start.",
-        ):
-            quit_early = True
+            if not quit_early:
+                _show_text(win, event, "Practice complete.", action="exit")
+        else:
+            if not _show_text(win, event, _main_instruction_text()):
+                quit_early = True
 
-        if not quit_early:
-            quit_early = _run_main_blocks(
-                win,
-                event,
-                visual,
-                core,
-                global_clock,
-                main_schedule,
-                events,
-                output_paths["events"],
-            )
+            if not quit_early:
+                scanner_event, did_quit = _wait_for_scanner(
+                    win,
+                    event,
+                    visual,
+                    global_clock,
+                    context,
+                )
+                if scanner_event:
+                    events.append(scanner_event)
+                    _write_events_csv(events, output_paths["events"])
+                if did_quit:
+                    quit_early = True
 
-        if not quit_early:
-            _show_text(win, event, "Task complete.\n\nPress space to exit.")
+            if not quit_early:
+                fixation_onset = _show_fixation(
+                    win,
+                    visual,
+                    core,
+                    global_clock,
+                    config.PRE_TASK_FIXATION_DURATION,
+                )
+                events.append(
+                    _event_row(
+                        context,
+                        phase="fixation",
+                        event_type="pre_task_fixation_onset",
+                        event_time_abs=fixation_onset,
+                        event_duration=config.PRE_TASK_FIXATION_DURATION,
+                    )
+                )
+                _write_events_csv(events, output_paths["events"])
+
+            if not quit_early:
+                quit_early = _run_main_blocks(
+                    win,
+                    event,
+                    visual,
+                    core,
+                    global_clock,
+                    main_schedule,
+                    events,
+                    output_paths["events"],
+                    show_block_instructions=False,
+                )
+
+            if not quit_early:
+                fixation_onset = _show_fixation(
+                    win,
+                    visual,
+                    core,
+                    global_clock,
+                    config.POST_TASK_FIXATION_DURATION,
+                )
+                events.append(
+                    _event_row(
+                        context,
+                        phase="fixation",
+                        event_type="post_task_fixation_onset",
+                        event_time_abs=fixation_onset,
+                        event_duration=config.POST_TASK_FIXATION_DURATION,
+                    )
+                )
+                _write_events_csv(events, output_paths["events"])
+
+            if not quit_early:
+                _show_text(win, event, "Task complete.", action="exit")
 
     finally:
         summary = _build_summary(
@@ -140,6 +186,7 @@ def _run_main_blocks(
     main_schedule: list[dict[str, Any]],
     events: list[dict[str, Any]],
     events_path: Path,
+    show_block_instructions: bool = True,
 ) -> bool:
     rows_by_block: dict[int, list[dict[str, Any]]] = {}
     for row in main_schedule:
@@ -148,7 +195,11 @@ def _run_main_blocks(
     for block_index in sorted(rows_by_block):
         block_rows = rows_by_block[block_index]
         block_type = block_rows[0]["block_type"]
-        if not _show_text(win, event, _instruction_text(block_type, practice=False)):
+        if show_block_instructions and not _show_text(
+            win,
+            event,
+            _instruction_text(block_type, practice=False),
+        ):
             return True
 
         for row in block_rows:
@@ -288,13 +339,93 @@ def _ellipse_vertices(width: float, height: float, points: int = 96) -> list[tup
     ]
 
 
-def _show_text(win: Any, event: Any, text: str) -> bool:
+def _show_text(win: Any, event: Any, text: str, action: str = "continue") -> bool:
     from psychopy import visual
 
-    _draw_center_text(win, visual, text + "\n\nPress space to continue.")
+    event.clearEvents()
+    _draw_center_text(
+        win,
+        visual,
+        f"{text}\n\nPress {config.CONTINUE_BUTTON_LABEL} to {action}.",
+    )
     win.flip()
     keys = event.waitKeys(keyList=[config.CONTINUE_KEY, config.QUIT_KEY])
     return bool(keys and keys[0] != config.QUIT_KEY)
+
+
+def _wait_for_scanner(
+    win: Any,
+    event: Any,
+    visual: Any,
+    global_clock: Any,
+    context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, bool]:
+    event.clearEvents()
+    _draw_center_text(win, visual, "Waiting for scanner")
+    win.flip()
+    keys = event.waitKeys(
+        keyList=[config.SCANNER_TRIGGER_KEY, config.QUIT_KEY],
+        timeStamped=global_clock,
+    )
+    if not keys:
+        return None, True
+
+    key, event_time = keys[0]
+    if key == config.QUIT_KEY:
+        return None, True
+
+    return (
+        _event_row(
+            context,
+            phase="scanner",
+            event_type="scanner_trigger",
+            event_time_abs=float(event_time),
+            response_key=key,
+        ),
+        False,
+    )
+
+
+def _show_fixation(
+    win: Any,
+    visual: Any,
+    core: Any,
+    global_clock: Any,
+    duration: float,
+) -> float:
+    _draw_fixation(win, visual)
+    win.flip()
+    onset = global_clock.getTime()
+    core.wait(duration)
+    return float(onset)
+
+
+def _event_row(
+    context: dict[str, Any],
+    phase: str,
+    event_type: str,
+    event_time_abs: float,
+    event_duration: float | str = "",
+    response_key: str = "",
+) -> dict[str, Any]:
+    row = {column: "" for column in config.DATA_COLUMNS}
+    row.update(
+        {
+            "participant_id": context.get("participant_id", ""),
+            "session": context.get("session", ""),
+            "phase": phase,
+            "event_type": event_type,
+            "block_type": event_type,
+            "response_key": response_key,
+            "event_time_abs": _format_time(event_time_abs),
+            "event_duration": (
+                _format_time(float(event_duration))
+                if event_duration not in ("", None)
+                else ""
+            ),
+        }
+    )
+    return row
 
 
 def _draw_center_text(win: Any, visual: Any, text: str) -> None:
@@ -323,11 +454,39 @@ def _instruction_text(block_type: str, practice: bool) -> str:
     if block_type == "face":
         return (
             f"{prefix}: face matching\n\n"
-            "Choose the lower face with the same emotion as the top face."
+            "Choose the bottom face with the same emotion as the top face.\n\n"
+            "Button 1: left\n"
+            "Button 2: right"
         )
     return (
         f"{prefix}: shape matching\n\n"
-        "Choose the lower shape that matches the top shape."
+        "Choose the bottom shape that matches the top shape.\n\n"
+        "Button 1: left\n"
+        "Button 2: right"
+    )
+
+
+def _main_instruction_text() -> str:
+    return (
+        "In each trial, choose which bottom item matches the top item.\n\n"
+        "For faces, match the emotion.\n"
+        "For shapes, match the shape.\n\n"
+        "Button 1: left\n"
+        "Button 2: right\n\n"
+        "Respond as quickly and accurately as you can.\n\n"
+        "After the next screen, wait for the scanner to start."
+    )
+
+
+def _practice_instruction_text() -> str:
+    return (
+        "Practice\n\n"
+        "Choose which bottom item matches the top item.\n\n"
+        "For faces, match the emotion.\n"
+        "For shapes, match the shape.\n\n"
+        "Button 1: left\n"
+        "Button 2: right\n\n"
+        "You will get feedback after each response."
     )
 
 
